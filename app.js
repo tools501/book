@@ -1344,6 +1344,12 @@ function initTheme(){
   };
 }
 
+document
+  .getElementById('hubBtn')
+  .addEventListener('click', () => {
+    window.location.href = '/hub/';
+  });
+
 function showSessionModal() {
 
   const modal =
