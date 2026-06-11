@@ -9,6 +9,40 @@ let RANKS = {};
 let RANK_ALIAS = {};
 let MARKS = [];
 
+const SHARED_AUTH_TOKEN_KEY =
+  'tools501_google_id_token';
+
+function getSharedAuthToken() {
+  try {
+    return sessionStorage.getItem(
+      SHARED_AUTH_TOKEN_KEY
+    );
+  } catch (e) {
+    return null;
+  }
+}
+
+function setSharedAuthToken(token) {
+  try {
+    sessionStorage.setItem(
+      SHARED_AUTH_TOKEN_KEY,
+      token
+    );
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function clearSharedAuthToken() {
+  try {
+    sessionStorage.removeItem(
+      SHARED_AUTH_TOKEN_KEY
+    );
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 function updateDashboard(items) {
   const shps = items.filter(i => i.status === 'A1').length;
   const rozp = items.filter(i => i.status === 'B2').length;
@@ -53,6 +87,7 @@ function handleCredentialResponse(response) {
   document.getElementById('loader').style.display = 'flex';
 
   authToken = response.credential;
+  setSharedAuthToken(authToken);
   loadData(authToken);
 }
 
@@ -1016,7 +1051,10 @@ function stopLoaderDots() {
   dotsTimer = null;
 }
 
-async function loadData(token) {
+async function loadData(
+  token,
+  options = {}
+) {
   const loaderText = document.getElementById('loaderText');
 
   loaderText.dataset.base = 'Завантаження даних';
@@ -1075,6 +1113,26 @@ async function loadData(token) {
       clearTimeout(msgTimer2);
     
       const err = result.error.toLowerCase();
+
+      if (
+        options.fromSharedSession &&
+        (
+          err.includes('token verification') ||
+          err.includes('auth_required')
+        )
+      ) {
+        stopLoaderDots();
+        authToken = '';
+        clearSharedAuthToken();
+
+        document.getElementById('loader').style.display =
+          'none';
+
+        document.getElementById('loginPage').style.display =
+          '';
+
+        return;
+      }
     
       if (err.includes('диск')) {
         showError(
@@ -1175,6 +1233,26 @@ async function loadData(token) {
       'Не вдалося отримати дані'
     );
   }
+}
+
+async function trySharedSession() {
+  const token = getSharedAuthToken();
+
+  if (!token) {
+    return;
+  }
+
+  authToken = token;
+
+  document.getElementById('loader').style.display =
+    'flex';
+
+  await loadData(
+    token,
+    {
+      fromSharedSession: true
+    }
+  );
 }
   
 document.addEventListener('click', function(e) {
@@ -1289,3 +1367,4 @@ function showSessionModal() {
 }
   
 initTheme();
+trySharedSession();
