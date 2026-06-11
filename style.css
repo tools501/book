@@ -138,6 +138,12 @@ html.dark .theme-toggle{
   border:1px solid rgba(255,255,255,.08);
 }
 
+html.dark .hub-btn{
+  background:rgba(20,30,50,.7);
+  border:1px solid rgba(255,255,255,.08);
+  color:#e2e8f0;
+}
+
 html.dark .bd-name,
 html.dark .bd-date,
 html.dark .ui-item{
@@ -964,6 +970,44 @@ html:not(.dark) .orders-list:hover::-webkit-scrollbar-thumb{
   opacity:.72;
 }
 
+.hub-btn{
+  position:absolute;
+  top:4px;
+  right:54px;
+
+  min-width:46px;
+  height:30px;
+  margin:0;
+  padding:0 11px;
+  border:1px solid rgba(0,0,0,.05);
+  border-radius:15px;
+
+  background:rgba(255,255,255,.55);
+  color:var(--text);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+
+  box-shadow:0 2px 8px rgba(0,0,0,.08);
+  cursor:pointer;
+  z-index:50;
+
+  font-size:12px;
+  font-weight:650;
+  line-height:1;
+  transition:.2s;
+  opacity:.72;
+}
+
+.hub-btn:hover{
+  transform:scale(1.05);
+  box-shadow:0 4px 12px rgba(0,0,0,.12);
+  opacity:1;
+}
+
+.hub-btn:active{
+  transform:scale(.95);
+}
+
 .theme-toggle:hover{
   transform: scale(1.05);
   box-shadow: 0 4px 12px rgba(0,0,0,.12);
@@ -981,6 +1025,16 @@ html:not(.dark) .orders-list:hover::-webkit-scrollbar-thumb{
     width:28px;
     height:28px;
     font-size:13px;
+  }
+
+  .hub-btn{
+    top:6px;
+    right:48px;
+    min-width:44px;
+    height:28px;
+    padding:0 10px;
+    border-radius:14px;
+    font-size:11px;
   }
 }
 
