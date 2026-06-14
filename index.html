@@ -71,6 +71,42 @@
   </div>
 </div>
 
+<div id="twoFactorPage" class="two-factor-page" style="display:none;">
+  <div class="two-factor-card">
+    <div class="two-factor-title">
+      Підтвердження 2FA
+    </div>
+
+    <input
+      id="twoFactorCode"
+      class="two-factor-code"
+      type="text"
+      inputmode="numeric"
+      autocomplete="one-time-code"
+      maxlength="6"
+      placeholder="000000"
+    >
+
+    <div class="two-factor-actions">
+      <button
+        id="twoFactorSubmitBtn"
+        class="two-factor-submit"
+        type="button"
+      >
+        Підтвердити
+      </button>
+
+      <button
+        id="twoFactorCancelBtn"
+        class="two-factor-cancel"
+        type="button"
+      >
+        Скасувати
+      </button>
+    </div>
+  </div>
+</div>
+
 <div id="app" style="display:none;">
   
   <div class="app-shell">
