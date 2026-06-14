@@ -209,6 +209,24 @@ html.dark .login-card{
   box-shadow:0 12px 35px rgba(0,0,0,.35);
 }
 
+html.dark .two-factor-card{
+  background:#10244b;
+  border-color:rgba(255,255,255,.08);
+  box-shadow:0 12px 35px rgba(0,0,0,.35);
+}
+
+html.dark .two-factor-code{
+  background:#111827;
+  border-color:#334155;
+  color:#f8fafc;
+}
+
+html.dark .two-factor-cancel{
+  background:#18253f;
+  border-color:rgba(255,255,255,.12);
+  color:#e2e8f0;
+}
+
 #loader{
   position:fixed;
   inset:0;
@@ -1076,6 +1094,124 @@ html:not(.dark) .orders-list:hover::-webkit-scrollbar-thumb{
 
   border-radius:999px;
   overflow:hidden;
+}
+
+.two-factor-page{
+  position:fixed;
+  inset:0;
+  z-index:10000;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+  background:var(--bg);
+}
+
+.two-factor-card{
+  width:100%;
+  max-width:320px;
+  padding:28px;
+  border:1px solid var(--border);
+  border-radius:16px;
+  background:var(--card-bg);
+  box-shadow:0 10px 30px rgba(0,0,0,.08);
+  text-align:center;
+}
+
+.two-factor-title{
+  margin-bottom:18px;
+  color:var(--text);
+  font-size:18px;
+  font-weight:700;
+}
+
+.two-factor-code{
+  width:160px;
+  height:46px;
+  padding:0 12px;
+  border:1px solid var(--input-border);
+  border-radius:14px;
+  background:var(--input-bg);
+  color:var(--text);
+  font-size:20px;
+  font-weight:700;
+  letter-spacing:6px;
+  text-align:center;
+}
+
+.two-factor-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-top:18px;
+}
+
+.two-factor-submit,
+.two-factor-cancel{
+  height:40px;
+  padding:0 12px;
+  border-radius:12px;
+  font-size:13px;
+  font-weight:650;
+  transition:
+    opacity .2s,
+    transform .2s,
+    background .2s;
+}
+
+.two-factor-submit{
+  border:1px solid #2f6ea5;
+  background:#2f6ea5;
+  color:#fff;
+}
+
+.two-factor-cancel{
+  border:1px solid var(--input-border);
+  background:var(--input-bg);
+  color:var(--text);
+}
+
+.two-factor-submit:hover,
+.two-factor-cancel:hover{
+  opacity:.92;
+  transform:translateY(-1px);
+}
+
+.two-factor-submit:disabled{
+  cursor:wait;
+  opacity:.65;
+  transform:none;
+}
+
+.two-factor-submit.loading{
+  color:transparent;
+  position:relative;
+}
+
+.two-factor-submit.loading::after{
+  content:'';
+  position:absolute;
+  top:50%;
+  left:50%;
+  width:14px;
+  height:14px;
+  margin:-8px 0 0 -8px;
+  border:2px solid rgba(255,255,255,.45);
+  border-top-color:#fff;
+  border-radius:50%;
+  animation:twoFactorSpin .7s linear infinite;
+}
+
+@keyframes twoFactorSpin{
+  to{
+    transform:rotate(360deg);
+  }
+}
+
+@media (max-width:480px){
+  .two-factor-card{
+    max-width:300px;
+    padding:24px 20px;
+  }
 }
 
 /* ORDERS */
