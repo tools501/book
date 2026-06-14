@@ -1605,7 +1605,9 @@ function showSessionModal() {
     modal.querySelector('.cancel');
 
   confirmBtn.onclick = () => {
-    location.reload();
+    authToken = '';
+    clearSharedAuthToken();
+    window.location.href = HUB_URL;
   };
 
   cancelBtn.onclick = () => {
