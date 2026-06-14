@@ -8,9 +8,14 @@ let FIELD_ORDER = [];
 let RANKS = {};
 let RANK_ALIAS = {};
 let MARKS = [];
+let pendingTwoFactorAuth = null;
 
 const SHARED_AUTH_TOKEN_KEY =
   'tools501_google_id_token';
+const HUB_API_URL =
+  'https://script.google.com/macros/s/AKfycbyAHpUfM1RrPJbamCVcc5rGhUgRKoLRKSULBGnCNGLyCSaFU5lp7SX2Ge1Wwv9YEV5-Sg/exec';
+const HUB_URL = '/hub/';
+const HUB_API_TIMEOUT_MS = 20000;
 
 function getSharedAuthToken() {
   try {
@@ -78,17 +83,220 @@ function groupBirthdays(items) {
   return map;
 }
 
-function handleCredentialResponse(response) {
+async function handleCredentialResponse(response) {
   if (!response?.credential) {
     console.error('No token');
     return;
   }
 
-  document.getElementById('loader').style.display = 'flex';
+  await authenticateWithToken(
+    response.credential,
+    {
+      persist: true
+    }
+  );
+}
 
-  authToken = response.credential;
-  setSharedAuthToken(authToken);
-  loadData(authToken);
+async function hubApi(action, data = {}, token = authToken) {
+  const formData = new URLSearchParams();
+
+  formData.append(
+    'payload',
+    JSON.stringify({
+      token,
+      action,
+      data
+    })
+  );
+
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    HUB_API_TIMEOUT_MS
+  );
+
+  try {
+    const response = await fetch(HUB_API_URL, {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal
+    });
+
+    return response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function showTwoFactorScreen(token, options) {
+  pendingTwoFactorAuth = {
+    token,
+    options
+  };
+
+  document.getElementById('loader').style.display = 'none';
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('error').style.display = 'none';
+
+  const codeInput = document.getElementById('twoFactorCode');
+
+  codeInput.value = '';
+  document.getElementById('twoFactorPage').style.display = 'flex';
+  codeInput.focus();
+}
+
+function hideTwoFactorScreen() {
+  document.getElementById('twoFactorPage').style.display = 'none';
+}
+
+function showLoginPage() {
+  document.getElementById('loader').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('error').style.display = 'none';
+  hideTwoFactorScreen();
+  document.getElementById('loginPage').style.display = 'flex';
+}
+
+async function ensureTwoFactorAccess(token, options) {
+  const result = await hubApi(
+    'check2fa',
+    {},
+    token
+  );
+
+  if (!result.success) {
+    throw new Error(
+      result.error || 'TWO_FACTOR_CHECK_FAILED'
+    );
+  }
+
+  const twoFactor =
+    result.data && result.data.twoFactor;
+
+  if (!twoFactor || !twoFactor.required) {
+    return true;
+  }
+
+  if (twoFactor.setupRequired) {
+    setSharedAuthToken(token);
+    window.location.href = HUB_URL;
+    return false;
+  }
+
+  showTwoFactorScreen(token, options);
+  return false;
+}
+
+async function submitTwoFactorCode() {
+  const pending = pendingTwoFactorAuth;
+  const code =
+    document.getElementById('twoFactorCode').value.trim();
+
+  if (!pending) {
+    return;
+  }
+
+  if (!/^\d{6}$/.test(code)) {
+    showToast('Введіть 6 цифр');
+    return;
+  }
+
+  const submitButton =
+    document.getElementById('twoFactorSubmitBtn');
+
+  submitButton.disabled = true;
+  submitButton.classList.add('loading');
+
+  try {
+    const result = await hubApi(
+      'verify2faGate',
+      {
+        code
+      },
+      pending.token
+    );
+
+    if (!result.success) {
+      showToast(
+        result.error === 'TWO_FACTOR_INVALID'
+          ? 'Невірний код'
+          : 'Не вдалося перевірити 2FA'
+      );
+      return;
+    }
+
+    const resume = pendingTwoFactorAuth;
+
+    pendingTwoFactorAuth = null;
+    hideTwoFactorScreen();
+
+    await authenticateWithToken(
+      resume.token,
+      {
+        ...resume.options,
+        skipTwoFactor: true
+      }
+    );
+  } catch (error) {
+    console.error(error);
+    showToast(
+      error.name === 'AbortError'
+        ? 'Перевірка 2FA зайняла забагато часу'
+        : 'Не вдалося перевірити 2FA'
+    );
+  } finally {
+    submitButton.disabled = false;
+    submitButton.classList.remove('loading');
+  }
+}
+
+function cancelTwoFactor() {
+  pendingTwoFactorAuth = null;
+  authToken = '';
+  clearSharedAuthToken();
+  showLoginPage();
+}
+
+async function authenticateWithToken(
+  token,
+  options = {}
+) {
+  authToken = token;
+
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('error').style.display = 'none';
+  document.getElementById('loader').style.display = 'flex';
+  hideTwoFactorScreen();
+
+  try {
+    if (!options.skipTwoFactor) {
+      const canContinue = await ensureTwoFactorAccess(
+        token,
+        options
+      );
+
+      if (!canContinue) {
+        return;
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    authToken = '';
+    clearSharedAuthToken();
+    showLoginPage();
+    showToast(
+      error.name === 'AbortError'
+        ? 'Перевірка 2FA зайняла забагато часу'
+        : 'Не вдалося перевірити 2FA'
+    );
+    return;
+  }
+
+  if (options.persist) {
+    setSharedAuthToken(token);
+  }
+
+  await loadData(token, options);
 }
 
 function showError(title, text='') {
@@ -1264,12 +1472,7 @@ async function trySharedSession() {
     return;
   }
 
-  authToken = token;
-
-  document.getElementById('loader').style.display =
-    'flex';
-
-  await loadData(
+  await authenticateWithToken(
     token,
     {
       fromSharedSession: true
@@ -1369,7 +1572,23 @@ function initTheme(){
 document
   .getElementById('hubBtn')
   .addEventListener('click', () => {
-    window.location.href = '/hub/';
+    window.location.href = HUB_URL;
+  });
+
+document
+  .getElementById('twoFactorSubmitBtn')
+  .addEventListener('click', submitTwoFactorCode);
+
+document
+  .getElementById('twoFactorCancelBtn')
+  .addEventListener('click', cancelTwoFactor);
+
+document
+  .getElementById('twoFactorCode')
+  .addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      submitTwoFactorCode();
+    }
   });
 
 function showSessionModal() {
