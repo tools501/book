@@ -548,6 +548,27 @@ function getSearchCount() {
   return document.getElementById('searchCount');
 }
 
+function getOrderFileUrl(order) {
+  const originalUrl = String(order?.file?.url || '').trim();
+  const fileName = String(order?.fileName || '').trim();
+
+  if (!originalUrl || !/\.docx$/i.test(fileName)) {
+    return originalUrl;
+  }
+
+  const driveFileId = originalUrl.match(
+    /drive\.google\.com\/file\/d\/([^/?#]+)/
+  )?.[1];
+
+  if (!driveFileId) {
+    return originalUrl;
+  }
+
+  return `https://docs.google.com/document/d/${encodeURIComponent(
+    driveFileId
+  )}/edit`;
+}
+
 function renderOrdersHTML(orders) {
   if (!orders || !orders.length) {
     return `
@@ -567,8 +588,9 @@ function renderOrdersHTML(orders) {
               order.file?.url
                 ? `
                   <a
-                    href="${order.file.url}"
+                    href="${getOrderFileUrl(order)}"
                     target="_blank"
+                    rel="noopener noreferrer"
                     class="order-link"
                     title="Відкрити файл наказу"
                   >
