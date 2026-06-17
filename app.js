@@ -697,9 +697,11 @@ function render(items, append = false) {
           📄 Стройові${item.ordersLoaded ? ` (${item.orders.length})` : ''}
         </button>
 
+        <!--
         <button class="action-btn social-btn" onclick="toggle(this, 'social')">
           🗂️ Соц. дані
         </button>
+        -->
       
         <button
           class="copy-all-btn"
