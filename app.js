@@ -17,6 +17,10 @@ const HUB_API_URL =
 const HUB_URL = '/hub/';
 const HUB_API_TIMEOUT_MS = 20000;
 
+function getUsageUserAgent() {
+  return navigator.userAgent || '';
+}
+
 function getSharedAuthToken() {
   try {
     return sessionStorage.getItem(
@@ -693,11 +697,9 @@ function render(items, append = false) {
           📄 Стройові${item.ordersLoaded ? ` (${item.orders.length})` : ''}
         </button>
 
-        <!--
         <button class="action-btn social-btn" onclick="toggle(this, 'social')">
           🗂️ Соц. дані
         </button>
-        -->
       
         <button
           class="copy-all-btn"
@@ -930,7 +932,8 @@ async function fetchOrders(pib) {
       body: JSON.stringify({
         action: 'orders',
         token: authToken,
-        pib
+        pib,
+        userAgent: getUsageUserAgent()
       })
     }
   );
@@ -962,7 +965,8 @@ async function fetchSocial(pib) {
       body: JSON.stringify({
         action: 'social',
         token: authToken,
-        pib
+        pib,
+        userAgent: getUsageUserAgent()
       })
     }
   );
@@ -1333,7 +1337,8 @@ async function loadData(
         },
         body: JSON.stringify({
           action: 'data',
-          token
+          token,
+          userAgent: getUsageUserAgent()
         })
       }
     );
