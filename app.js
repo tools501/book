@@ -8,17 +8,240 @@ let FIELD_ORDER = [];
 let RANKS = {};
 let RANK_ALIAS = {};
 let MARKS = [];
+let DVGZ_LABELS = {};
+let SOCIAL_LABELS = {};
+let SEARCH_FIELDS = [];
 let pendingTwoFactorAuth = null;
+let apiRequestCounter = 0;
 
 const SHARED_AUTH_TOKEN_KEY =
   'tools501_google_id_token';
 const HUB_API_URL =
   'https://script.google.com/macros/s/AKfycbyAHpUfM1RrPJbamCVcc5rGhUgRKoLRKSULBGnCNGLyCSaFU5lp7SX2Ge1Wwv9YEV5-Sg/exec';
+const BOOK_API_URL =
+  'https://script.google.com/macros/s/AKfycbxaGJM3J0JmOBoKe5GwwnKNt4vtuQi5TUn_EVky0KUHlZhq6DoWcIyrc6fQ19JIeElV3w/exec';
 const HUB_URL = '/hub/';
 const HUB_API_TIMEOUT_MS = 20000;
+const ENABLE_TWO_FACTOR_GATE = false;
+const SHOW_SOCIAL_DATA_BUTTON = false;
+
+const DEFAULT_DVGZ_LABELS = {
+  button: 'DVGZ',
+  title: 'DVGZ',
+  filterLabel: 'Filter',
+  filterAll: 'All',
+  paymentsTitle: 'Data',
+  mergedTitle: 'Summary',
+  loading: 'Loading...',
+  empty: 'No data',
+  emptyFilter: 'No data',
+  error: 'Load error',
+  orderNumber: 'Number',
+  dates: 'Dates',
+  count: 'Count',
+  type: 'Type',
+  period: 'Period',
+  days: 'Days',
+  filters: [
+    {
+      value: 'all',
+      label: 'All',
+      mergedIncludes: ''
+    }
+  ]
+};
+
+const DEFAULT_SOCIAL_LABELS = {
+  button: 'Data',
+  empty: 'No data'
+};
+
+const DEFAULT_SEARCH_FIELDS = [
+  {
+    value: 'pib',
+    label: 'ПІБ',
+    source: 'root',
+    key: 'pib',
+    placeholder: 'Пошук по ПІБ...'
+  }
+];
 
 function getUsageUserAgent() {
   return navigator.userAgent || '';
+}
+
+function getDvgzLabel(key) {
+  return DVGZ_LABELS[key] || DEFAULT_DVGZ_LABELS[key] || key;
+}
+
+function getSocialLabel(key) {
+  return SOCIAL_LABELS[key] || DEFAULT_SOCIAL_LABELS[key] || key;
+}
+
+function getSearchFields() {
+  return SEARCH_FIELDS.length ? SEARCH_FIELDS : DEFAULT_SEARCH_FIELDS;
+}
+
+function getActiveSearchField() {
+  const select = document.getElementById('searchField');
+  const fields = getSearchFields();
+  const value = select && select.value;
+
+  return (
+    fields.find(field => field.value === value) ||
+    fields[0]
+  );
+}
+
+function getSearchFieldValue(item, field) {
+  if (!field) {
+    return '';
+  }
+
+  if (field.source === 'all') {
+    return String(
+      item &&
+      item.all &&
+      item.all[field.key] ||
+      ''
+    );
+  }
+
+  return String(
+    item &&
+    item[field.key] ||
+    ''
+  );
+}
+
+function isActiveSearchDetailsKey(key) {
+  const input = document.getElementById('search');
+
+  if (!input || !input.value.trim()) {
+    return false;
+  }
+
+  const field = getActiveSearchField();
+
+  return Boolean(
+    field &&
+    field.detailsKey &&
+    field.detailsKey === key
+  );
+}
+
+function renderSearchFields() {
+  const select = document.getElementById('searchField');
+  const input = document.getElementById('search');
+
+  if (!select || !input) {
+    return;
+  }
+
+  const fields = getSearchFields();
+
+  select.innerHTML = '';
+
+  fields.forEach(field => {
+    const option = document.createElement('option');
+
+    option.value = field.value;
+    option.textContent = field.label;
+    select.appendChild(option);
+  });
+
+  input.placeholder = fields[0]?.placeholder || 'Пошук...';
+}
+
+function applySearch() {
+  const val = searchInput.value;
+  const field = getActiveSearchField();
+  const lower = val.trim().toLowerCase();
+
+  clearBtn.style.display = val ? 'block' : 'none';
+
+  currentData = lower
+    ? data.filter(item =>
+        getSearchFieldValue(item, field)
+          .toLowerCase()
+          .includes(lower)
+      )
+    : data;
+
+  const el = getSearchCount();
+
+  if (el) {
+    if (val) {
+      el.style.display = 'block';
+      el.innerHTML = `🔍 <b>Знайдено:</b> ${currentData.length}`;
+    } else {
+      el.style.display = 'none';
+    }
+  }
+
+  visibleCount = 30;
+  render(currentData.slice(0, visibleCount));
+}
+
+function createApiRequestId() {
+  apiRequestCounter += 1;
+
+  return `${Date.now()}-${apiRequestCounter}`;
+}
+
+function getApiDuration(startedAt) {
+  return Math.round(performance.now() - startedAt);
+}
+
+function logApiRequest(
+  type,
+  {
+    requestId,
+    service,
+    action,
+    method,
+    startedAt,
+    response = null,
+    result = null,
+    error = null
+  }
+) {
+  const isFailed = type === 'failed';
+  const payload = {
+    requestId,
+    service,
+    action,
+    method,
+    durationMs: getApiDuration(startedAt),
+    status: response?.status ?? null,
+    statusText: response?.statusText ?? null,
+    redirected: response?.redirected ?? null,
+    responseType: response?.type ?? null,
+    responseUrl: response?.url ?? null,
+    contentType:
+      response?.headers?.get('content-type') ?? null,
+    apiSuccess:
+      typeof result?.success === 'boolean'
+        ? result.success
+        : result?.error
+          ? false
+          : result
+            ? true
+            : null,
+    apiError: result?.error || null,
+    backendTiming:
+      result?.timing || result?.backendTiming || null,
+    errorName: error?.name || null,
+    errorMessage: error?.message || null,
+    timestamp: new Date().toISOString()
+  };
+
+  const message = isFailed
+    ? '[Book API request failed]'
+    : '[Book API request completed]';
+  const logger = isFailed ? console.error : console.log;
+
+  logger(message, payload);
 }
 
 function getSharedAuthToken() {
@@ -102,6 +325,9 @@ async function handleCredentialResponse(response) {
 }
 
 async function hubApi(action, data = {}, token = authToken) {
+  const requestId = createApiRequestId();
+  const startedAt = performance.now();
+  const method = 'POST';
   const formData = new URLSearchParams();
 
   formData.append(
@@ -121,14 +347,84 @@ async function hubApi(action, data = {}, token = authToken) {
 
   try {
     const response = await fetch(HUB_API_URL, {
-      method: 'POST',
+      method,
       body: formData,
       signal: controller.signal
     });
+    const result = await response.json();
 
-    return response.json();
+    logApiRequest('completed', {
+      requestId,
+      service: 'hub',
+      action,
+      method,
+      startedAt,
+      response,
+      result
+    });
+
+    return result;
+  } catch (error) {
+    logApiRequest('failed', {
+      requestId,
+      service: 'hub',
+      action,
+      method,
+      startedAt,
+      error
+    });
+
+    throw error;
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function bookApi(action, data = {}, token = authToken) {
+  const requestId = createApiRequestId();
+  const startedAt = performance.now();
+  const method = 'POST';
+
+  try {
+    const response = await fetch(
+      BOOK_API_URL,
+      {
+        method,
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify({
+          action,
+          token,
+          ...data,
+          userAgent: getUsageUserAgent()
+        })
+      }
+    );
+    const result = await response.json();
+
+    logApiRequest('completed', {
+      requestId,
+      service: 'book',
+      action,
+      method,
+      startedAt,
+      response,
+      result
+    });
+
+    return result;
+  } catch (error) {
+    logApiRequest('failed', {
+      requestId,
+      service: 'book',
+      action,
+      method,
+      startedAt,
+      error
+    });
+
+    throw error;
   }
 }
 
@@ -273,7 +569,7 @@ async function authenticateWithToken(
   hideTwoFactorScreen();
 
   try {
-    if (!options.skipTwoFactor) {
+    if (ENABLE_TWO_FACTOR_GATE && !options.skipTwoFactor) {
       const canContinue = await ensureTwoFactorAccess(
         token,
         options
@@ -585,6 +881,104 @@ function highlightSZCH(text) {
   });
 }
 
+function getSzchHighlightRanges(text) {
+  const ranges = [];
+  const regex =
+    /(^|[^а-яіїєґa-z])(сзч)(?=[^а-яіїєґa-z]|$)/gi;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    const start = match.index + match[1].length;
+
+    ranges.push({
+      start,
+      end: start + match[2].length,
+      className: 'detail-szch-match'
+    });
+  }
+
+  return ranges;
+}
+
+function getSearchHighlightRanges(text, key) {
+  if (!isActiveSearchDetailsKey(key)) {
+    return [];
+  }
+
+  const input = document.getElementById('search');
+  const query = String(input?.value || '').trim();
+
+  if (!query) {
+    return [];
+  }
+
+  const ranges = [];
+  const source = text.toLowerCase();
+  const needle = query.toLowerCase();
+  let index = source.indexOf(needle);
+
+  while (index !== -1) {
+    ranges.push({
+      start: index,
+      end: index + needle.length,
+      className: 'detail-search-value-match'
+    });
+
+    index = source.indexOf(needle, index + needle.length);
+  }
+
+  return ranges;
+}
+
+function renderDetailValue(rawValue, key) {
+  const text = String(rawValue ?? '');
+  const ranges = [
+    ...getSzchHighlightRanges(text),
+    ...getSearchHighlightRanges(text, key)
+  ];
+
+  if (!ranges.length) {
+    return escapeHtml(text).replace(/\r?\n/g, '<br>');
+  }
+
+  const points = new Set([0, text.length]);
+
+  ranges.forEach(range => {
+    points.add(range.start);
+    points.add(range.end);
+  });
+
+  const sortedPoints = Array.from(points)
+    .sort((a, b) => a - b);
+  const html = [];
+
+  for (let i = 0; i < sortedPoints.length - 1; i++) {
+    const start = sortedPoints[i];
+    const end = sortedPoints[i + 1];
+    const chunk = text.slice(start, end);
+
+    if (!chunk) {
+      continue;
+    }
+
+    const classNames = ranges
+      .filter(range => range.start < end && range.end > start)
+      .map(range => range.className);
+    const safeChunk = escapeHtml(chunk).replace(/\r?\n/g, '<br>');
+
+    if (classNames.length) {
+      html.push(
+        `<span class="${[...new Set(classNames)].join(' ')}">` +
+        `${safeChunk}</span>`
+      );
+    } else {
+      html.push(safeChunk);
+    }
+  }
+
+  return html.join('');
+}
+
 function copyText(text) {
   navigator.clipboard.writeText(text);
   showToast('Скопійовано');
@@ -653,6 +1047,13 @@ function render(items, append = false) {
       item.orders = [];
       item.view = 'details';
     }
+
+    if (item.dvgzLoaded === undefined) {
+      item.dvgzLoaded = false;
+      item.dvgzLoading = false;
+      item.dvgz = null;
+      item.dvgzFilter = 'all';
+    }
     const div = document.createElement('div');
     div.className = 'card';
     div.dataset.index = currentData.indexOf(item);
@@ -697,11 +1098,19 @@ function render(items, append = false) {
           📄 Стройові${item.ordersLoaded ? ` (${item.orders.length})` : ''}
         </button>
 
-        <!--
-        <button class="action-btn social-btn" onclick="toggle(this, 'social')">
-          🗂️ Соц. дані
+        ${
+          SHOW_SOCIAL_DATA_BUTTON
+            ? `
+              <button class="action-btn social-btn" onclick="toggle(this, 'social')">
+                🗂️ ${escapeHtml(getSocialLabel('button'))}
+              </button>
+            `
+            : ''
+        }
+
+        <button class="action-btn dvgz-btn" onclick="toggle(this, 'dvgz')">
+          ◈ ${getDvgzLabel('button')}
         </button>
-        -->
       
         <button
           class="copy-all-btn"
@@ -732,11 +1141,14 @@ function buildDetailsHTML(item) {
 
   return finalKeys.map(k => {
     const rawValue = data[k];
-    let v = highlightSZCH(rawValue);
     
-    if (v === null || v === undefined || v === '') return '';
+    if (
+      rawValue === null ||
+      rawValue === undefined ||
+      rawValue === ''
+    ) return '';
     
-    v = String(v).replace(/\r?\n/g, '<br>');
+    const v = renderDetailValue(rawValue, k);
 
     const displayKey = (FIELD_LABELS[k] || k).replace(/\r?\n/g, ' ');
 
@@ -850,7 +1262,7 @@ function renderSocialHTML(social) {
   if (!social?.found) {
     return `
       <div class="orders-empty">
-        🗂️ Соціальні дані відсутні
+        🗂️ ${escapeHtml(getSocialLabel('empty'))}
       </div>
     `;
   }
@@ -919,28 +1331,269 @@ function renderSocialHTML(social) {
   `;
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function getDvgzTypeOptions() {
+  return Array.isArray(DVGZ_LABELS.filters)
+    ? DVGZ_LABELS.filters
+    : DEFAULT_DVGZ_LABELS.filters;
+}
+
+function getDvgzTypeOption(filter) {
+  return getDvgzTypeOptions().find(option =>
+    option.value === filter
+  );
+}
+
+function hasDvgzOrderNumber(value) {
+  return /№\s*\d/.test(
+    String(value || '')
+  );
+}
+
+function getDvgzPaymentTypeOption(type) {
+  const normalizedType = String(type || '').trim();
+
+  return getDvgzTypeOptions().find(option =>
+    String(option.paymentType || '').trim() === normalizedType
+  );
+}
+
+function getDvgzPaymentTypeClass(type) {
+  const colorKey =
+    getDvgzPaymentTypeOption(type)?.colorKey;
+
+  return colorKey
+    ? `dvgz-type-color-${colorKey}`
+    : '';
+}
+
+function isDvgzAllFilter(filter) {
+  const selectedOption = getDvgzTypeOption(filter);
+
+  return selectedOption?.showAll !== false &&
+    !String(selectedOption?.paymentType || '').trim();
+}
+
+function getDvgzMergedGroups(dvgz, filter) {
+  const groups = Array.isArray(dvgz?.mergedPeriods)
+    ? dvgz.mergedPeriods
+    : [];
+  const selectedOption = getDvgzTypeOption(filter);
+  const mergedIncludes =
+    String(selectedOption?.mergedIncludes || '').trim();
+
+  if (!mergedIncludes) {
+    return filter === 'all' ? groups : [];
+  }
+
+  return groups.filter(group =>
+    String(group?.title || '').includes(mergedIncludes)
+  );
+}
+
+function renderDvgzPaymentRows(payments) {
+  if (!payments.length) {
+    return '';
+  }
+
+  const orderCounts = payments.reduce((acc, payment) => {
+    const key = String(payment?.orderNumber || '').trim();
+
+    if (key && hasDvgzOrderNumber(key)) {
+      acc[key] = (acc[key] || 0) + 1;
+    }
+
+    return acc;
+  }, {});
+
+  const duplicateOrderKeys = Object.keys(orderCounts)
+    .filter(key => orderCounts[key] > 1);
+
+  const duplicateOrderClassByKey =
+    duplicateOrderKeys.reduce((acc, key, index) => {
+      acc[key] = `dvgz-order-color-${(index % 6) + 1}`;
+
+      return acc;
+    }, {});
+
+  return payments.map(payment => {
+    const orderKey = String(payment?.orderNumber || '').trim();
+    const duplicateOrderClass = duplicateOrderClassByKey[orderKey]
+      ? `dvgz-order-duplicate ${duplicateOrderClassByKey[orderKey]}`
+      : '';
+    const paymentTypeClass =
+      getDvgzPaymentTypeClass(payment?.type);
+
+    return `
+    <div class="dvgz-row-card">
+      <div class="dvgz-row-main">
+        <span class="dvgz-order-title">
+          <span class="dvgz-label">
+            ${escapeHtml(getDvgzLabel('orderNumber'))}:
+          </span>
+          <span class="dvgz-main-value ${duplicateOrderClass}">
+            ${escapeHtml(payment.orderNumber || '—')}
+          </span>
+        </span>
+        <span class="dvgz-type ${paymentTypeClass}">
+          ${escapeHtml(payment.type || '—')}
+        </span>
+      </div>
+      <div class="dvgz-row-meta">
+        <span>
+          <span class="dvgz-label">
+            ${escapeHtml(getDvgzLabel('dates'))}:
+          </span>
+          <span class="dvgz-meta-value">
+            ${escapeHtml(payment.dates || '—')}
+          </span>
+        </span>
+        <span>
+          <span class="dvgz-label">
+            ${escapeHtml(getDvgzLabel('count'))}:
+          </span>
+          <span class="dvgz-meta-value">
+            ${escapeHtml(payment.count || '—')}
+          </span>
+        </span>
+      </div>
+    </div>
+  `;
+  }).join('');
+}
+
+function renderDvgzMergedGroups(groups) {
+  if (!groups.length) {
+    return '';
+  }
+
+  return groups.map(group => `
+    <div class="dvgz-merged-card">
+      <div class="dvgz-merged-title">
+        ${escapeHtml(group.title || getDvgzLabel('mergedTitle'))}
+      </div>
+      <div class="dvgz-merged-list">
+        ${(group.rows || []).map(row => `
+          <div class="dvgz-merged-row">
+            <span class="dvgz-merged-period">
+              ${escapeHtml(row.period || '—')}
+            </span>
+            <strong>${escapeHtml(row.days || '—')}</strong>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderDvgzEmpty(message) {
+  return `
+    <div class="dvgz-empty-state">
+      <span class="dvgz-empty-icon">⊹</span>
+      <span>${escapeHtml(message)}</span>
+    </div>
+  `;
+}
+
+function renderDvgzHTML(dvgz, filter = 'all') {
+  if (!dvgz?.found) {
+    return `
+      ${renderDvgzEmpty(getDvgzLabel('empty'))}
+    `;
+  }
+
+  const payments = Array.isArray(dvgz.payments)
+    ? dvgz.payments
+    : [];
+  const selectedOption = getDvgzTypeOption(filter);
+  const paymentType =
+    String(selectedOption?.paymentType || filter || '').trim();
+  const filteredPayments = isDvgzAllFilter(filter)
+    ? payments
+    : payments.filter(payment =>
+      String(payment?.type || '') === paymentType
+    );
+  const mergedGroups = getDvgzMergedGroups(dvgz, filter);
+  const hasFilteredData =
+    filteredPayments.length > 0 || mergedGroups.length > 0;
+
+  return `
+    <div class="dvgz-block">
+      <div class="dvgz-toolbar">
+        <div class="dvgz-title">
+          ${escapeHtml(getDvgzLabel('title'))}
+        </div>
+        <label class="dvgz-filter-label">
+          <span>${escapeHtml(getDvgzLabel('filterLabel'))}</span>
+          <select class="dvgz-filter">
+            ${getDvgzTypeOptions().map(option => `
+              <option
+                value="${option.value}"
+                ${option.value === filter ? 'selected' : ''}
+              >
+                ${escapeHtml(option.label)}
+              </option>
+            `).join('')}
+          </select>
+        </label>
+      </div>
+
+      <div class="dvgz-scroll">
+        ${
+          hasFilteredData
+            ? `
+              ${
+                filteredPayments.length
+                  ? `
+                    <div class="dvgz-section">
+                      <div class="dvgz-section-title">
+                        ${escapeHtml(getDvgzLabel('paymentsTitle'))}
+                        <span>${filteredPayments.length}</span>
+                      </div>
+                      <div class="dvgz-list">
+                        ${renderDvgzPaymentRows(filteredPayments)}
+                      </div>
+                    </div>
+                  `
+                  : ''
+              }
+
+              ${
+                mergedGroups.length
+                  ? `
+                    <div class="dvgz-section">
+                      <div class="dvgz-section-title">
+                        ${escapeHtml(getDvgzLabel('mergedTitle'))}
+                      </div>
+                      <div class="dvgz-list">
+                        ${renderDvgzMergedGroups(mergedGroups)}
+                      </div>
+                    </div>
+                  `
+                  : ''
+              }
+            `
+            : renderDvgzEmpty(getDvgzLabel('emptyFilter'))
+        }
+      </div>
+    </div>
+  `;
+}
+
 function handleExpiredSession() {
   showSessionModal();
 }
 
 async function fetchOrders(pib) {
-  const res = await fetch(
-    'https://script.google.com/macros/s/AKfycbxaGJM3J0JmOBoKe5GwwnKNt4vtuQi5TUn_EVky0KUHlZhq6DoWcIyrc6fQ19JIeElV3w/exec',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      body: JSON.stringify({
-        action: 'orders',
-        token: authToken,
-        pib,
-        userAgent: getUsageUserAgent()
-      })
-    }
-  );
-
-  const result = await res.json();
+  const result = await bookApi('orders', { pib });
 
   if (result.error) {
     if (
@@ -957,23 +1610,7 @@ async function fetchOrders(pib) {
 }
 
 async function fetchSocial(pib) {
-  const res = await fetch(
-    'https://script.google.com/macros/s/AKfycbxaGJM3J0JmOBoKe5GwwnKNt4vtuQi5TUn_EVky0KUHlZhq6DoWcIyrc6fQ19JIeElV3w/exec',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      body: JSON.stringify({
-        action: 'social',
-        token: authToken,
-        pib,
-        userAgent: getUsageUserAgent()
-      })
-    }
-  );
-
-  const result = await res.json();
+  const result = await bookApi('social', { pib });
 
   if (result.error) {
 
@@ -994,6 +1631,29 @@ async function fetchSocial(pib) {
   };
 }
 
+async function fetchDvgz(pib) {
+  const result = await bookApi('dvgz', { pib });
+
+  if (result.error) {
+
+    if (
+      result.error.includes('Token verification')
+    ) {
+      handleExpiredSession();
+
+      return null;
+    }
+
+    throw new Error(result.error);
+  }
+
+  return result.dvgz || {
+    found: false,
+    payments: [],
+    mergedPeriods: []
+  };
+}
+
 async function switchDetailsContent(details, html) {
   details.style.opacity = '0';
   details.style.transform = 'translateY(6px)';
@@ -1007,6 +1667,31 @@ async function switchDetailsContent(details, html) {
     details.style.opacity = '1';
     details.style.transform = 'translateY(0)';
   });
+}
+
+function scrollToSearchMatch(details) {
+  const input = document.getElementById('search');
+
+  if (!input || !input.value.trim()) {
+    return;
+  }
+
+  window.setTimeout(() => {
+    const match = details.querySelector(
+      '.detail-search-value-match'
+    );
+
+    if (!match) {
+      return;
+    }
+
+    const target = match.closest('.detail-row') || match;
+
+    target.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center'
+    });
+  }, 460);
 }
 
 function toggle(btn, mode = 'details') {
@@ -1058,6 +1743,7 @@ function toggle(btn, mode = 'details') {
     );
 
     details.dataset.mode = 'details';
+    scrollToSearchMatch(details);
 
     return;
   }
@@ -1212,6 +1898,75 @@ function toggle(btn, mode = 'details') {
 
     return;
   }
+
+  if (mode === 'dvgz') {
+
+    copyBtn.style.display = 'none';
+
+    if (item.dvgzLoaded) {
+
+      switchDetailsContent(
+        details,
+        renderDvgzHTML(item.dvgz, item.dvgzFilter)
+      );
+
+      details.dataset.mode = 'dvgz';
+
+      return;
+    }
+
+    if (item.dvgzLoading) return;
+
+    item.dvgzLoading = true;
+
+    switchDetailsContent(details, `
+      <div class="inline-loader">
+        <div class="inline-loader-wrap">
+          <div class="inline-loader-dot"></div>
+        </div>
+        <span>${escapeHtml(getDvgzLabel('loading'))}</span>
+      </div>
+    `);
+
+    details.dataset.mode = 'dvgz';
+
+    fetchDvgz(item.pib)
+      .then((dvgz) => {
+
+        item.dvgz = dvgz;
+        item.dvgzLoaded = true;
+        item.dvgzLoading = false;
+
+        const dvgzBtn =
+          card.querySelector('.dvgz-btn');
+
+        if (dvgz?.found) {
+          dvgzBtn.classList.add('has-data');
+        }
+
+        switchDetailsContent(
+          details,
+          renderDvgzHTML(item.dvgz, item.dvgzFilter)
+        );
+      })
+      .catch((err) => {
+
+        console.error(err);
+
+        item.dvgzLoading = false;
+
+        switchDetailsContent(details, `
+          <div style="
+            padding:16px 0;
+            color:#ff6b6b;
+          ">
+            ⚠️ ${escapeHtml(getDvgzLabel('error'))}
+          </div>
+        `);
+      });
+
+    return;
+  }
 }
 
 function loadMore() {
@@ -1229,42 +1984,27 @@ window.addEventListener('scroll', () => {
 });
 
 const searchInput = document.getElementById('search');
+const searchFieldSelect = document.getElementById('searchField');
 const clearBtn = document.getElementById('clearSearch');
 
-searchInput.addEventListener('input', e => {
-  const val = e.target.value;
+searchInput.addEventListener('input', applySearch);
 
-  clearBtn.style.display = val ? 'block' : 'none';
+searchFieldSelect.addEventListener('change', () => {
+  const field = getActiveSearchField();
 
-  const lower = val.toLowerCase();
-
-  currentData = data.filter(item =>
-    (item.pib + item.f12 + item.f13 + item.status)
-      .toLowerCase()
-      .includes(lower)
-  );
-
-  if (val) {
-    const el = getSearchCount();
-
-    if (el) {
-      el.style.display = 'block';
-      el.innerHTML = `🔍 <b>Знайдено:</b> ${currentData.length}`;
-    }
-  } else {
-    const el = getSearchCount();
-    if (el) el.style.display = 'none';
-  }
-
-  visibleCount = 30;
-  render(currentData.slice(0, visibleCount));
+  searchInput.placeholder = field.placeholder || 'Пошук...';
+  applySearch();
 });
 
 clearBtn.addEventListener('click', () => {
   searchInput.value = '';
   clearBtn.style.display = 'none';
 
-  getSearchCount().style.display = 'none';
+  const el = getSearchCount();
+
+  if (el) {
+    el.style.display = 'none';
+  }
 
   currentData = data;
   visibleCount = 30;
@@ -1330,22 +2070,7 @@ async function loadData(
   }, 20000);
 
   try {
-    const res = await fetch(
-      'https://script.google.com/macros/s/AKfycbxaGJM3J0JmOBoKe5GwwnKNt4vtuQi5TUn_EVky0KUHlZhq6DoWcIyrc6fQ19JIeElV3w/exec',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8'
-        },
-        body: JSON.stringify({
-          action: 'data',
-          token,
-          userAgent: getUsageUserAgent()
-        })
-      }
-    );
-
-    const result = await res.json();
+    const result = await bookApi('data', {}, token);
 
     if (result.error) {
       clearTimeout(msgTimer1);
@@ -1411,8 +2136,16 @@ async function loadData(
     FIELD_LABELS = result.meta?.fields || {};
     FIELD_ORDER = result.meta?.order || [];
     MARKS = result.meta?.marks || [];
+    SEARCH_FIELDS =
+      result.meta?.searchFields || DEFAULT_SEARCH_FIELDS;
+    SOCIAL_LABELS =
+      result.meta?.uiLabels?.social || DEFAULT_SOCIAL_LABELS;
+    DVGZ_LABELS =
+      result.meta?.uiLabels?.dvgz || DEFAULT_DVGZ_LABELS;
     RANKS = result.assets?.ranks || {};
     RANK_ALIAS = result.assets?.rankAlias || {};
+
+    renderSearchFields();
 
     const CHEVRON = result.assets?.chevron || '';
 
@@ -1531,6 +2264,29 @@ document.addEventListener('click', function(e) {
 
 });
 
+document.addEventListener('change', function(e) {
+  if (!e.target.classList.contains('dvgz-filter')) {
+    return;
+  }
+
+  const card = e.target.closest('.card');
+  const details = card?.querySelector('.details');
+  const item = currentData[card?.dataset.index];
+
+  if (!card || !details || !item) {
+    return;
+  }
+
+  item.dvgzFilter = e.target.value || 'all';
+
+  switchDetailsContent(
+    details,
+    renderDvgzHTML(item.dvgz, item.dvgzFilter)
+  );
+
+  details.dataset.mode = 'dvgz';
+});
+
 const scrollBtn = document.getElementById('scrollTopBtn');
 
 // показ / ховання кнопки
@@ -1616,7 +2372,7 @@ function showSessionModal() {
   confirmBtn.onclick = () => {
     authToken = '';
     clearSharedAuthToken();
-    window.location.href = HUB_URL;
+    window.location.reload();
   };
 
   cancelBtn.onclick = () => {
